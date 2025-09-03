@@ -1,0 +1,11 @@
+[package]
+name = "gpu_random"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bytemuck = { version = "1.14", features = ["derive"] }
+num = { version = "0.4", default-features = false, features = ["libm"] }
+
+[lints]
+workspace = true

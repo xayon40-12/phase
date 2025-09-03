@@ -1,0 +1,49 @@
+[package]
+name = "phase"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+gpu_test = []
+
+[dependencies]
+gpu_random = { path = "gpu_random" }
+kernel = { path = "kernel" }
+instant = { version = "0.1", features = ["wasm-bindgen"], default-features = false }
+eframe = { version = "0.31", features = ["wgpu"] }
+egui = { version = "0.31" }
+egui-wgpu = { version = "0.31" }
+log = "0.4"
+num = "0.4"
+glam = "0.30"
+futures = { version = "0.3" }
+bytemuck = { version = "1.23", features = ["derive"] }
+wgpu = { version = "24.0", features = ["spirv", "vulkan-portability", "webgpu", "webgl"] }
+pollster = { version = "0.3" }
+thiserror = "2.0"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen-futures = "0.4.50"
+web-sys = "0.3.70"              # to access the DOM (to hide the loading text)
+gloo-timers = {version = "0.3", features = ["futures"]}
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+env_logger = "0.11.8"
+
+[build-dependencies]
+spirv-builder = { git = "https://github.com/rust-gpu/rust-gpu", rev = "45266f5" }
+
+[workspace]
+members = ["kernel", "gpu_random"]
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "allow", check-cfg = ['cfg(target_arch, values("spirv"))'] }
+
+# Compile build-dependencies in release mode with
+# the same settings as regular dependencies.
+[profile.release.build-override]
+opt-level = 3
+codegen-units = 16
+[profile.dev.build-override]
+opt-level = 3
