@@ -3,7 +3,7 @@ use std::sync::Arc;
 use bytemuck::bytes_of;
 use gpu_random::philox::Philox4x32;
 use kernel::IsingCtx;
-use wgpu::{Buffer, util::DeviceExt};
+use wgpu::{Buffer, CommandEncoder, util::DeviceExt};
 
 use crate::{gpu::pipeline::Pipeline, simulation::atomic_f32::AtomicF32};
 
@@ -14,11 +14,11 @@ pub struct IsingPipeline {
     reset_pipeline: Pipeline,
     step_pipeline: Pipeline,
     vals_buffer: Buffer,
+    new_vals_buffer: Buffer,
     width: u32,
     height: u32,
     temperature: Arc<AtomicF32>,
     chemical_potential: Arc<AtomicF32>,
-    len: [u32; 2],
 }
 
 impl IsingPipeline {
@@ -53,11 +53,18 @@ impl IsingPipeline {
             mapped_at_creation: false,
         });
 
+        let new_vals_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Ising new vals buffer"),
+            size: count as u64 * size_of::<f32>() as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+
         let rngs = vec![Philox4x32::new(unsafe { std::mem::transmute(seed) }, 7); count];
         let rngs_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Ising rngs buffer"),
             contents: bytemuck::cast_slice(&rngs),
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            usage: wgpu::BufferUsages::STORAGE,
         });
 
         let p = IsingPipeline {
@@ -76,26 +83,27 @@ impl IsingPipeline {
                 "ising_step",
                 [
                     (0, &ctx_buffer, None, None),
-                    (1, &vals_buffer, Some(false), None),
-                    (2, &rngs_buffer, Some(false), None),
+                    (1, &vals_buffer, Some(true), None),
+                    (2, &new_vals_buffer, Some(false), None),
+                    (3, &rngs_buffer, Some(false), None),
                 ],
             ),
             ctx_buffer,
             vals_buffer,
+            new_vals_buffer,
             width,
             height,
             temperature,
             chemical_potential,
-            len: [ctx.width, ctx.height],
         };
         p.reset(device, queue);
         p
     }
-    fn dispatch<const N: usize>(
+    fn dispatch(
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        commands: [wgpu::CommandBuffer; N],
+        with_encoder: impl FnOnce(&mut CommandEncoder),
         pipeline: &Pipeline,
     ) {
         // Encode commands for this single pass
@@ -112,17 +120,34 @@ impl IsingPipeline {
             compute_pass.set_pipeline(&pipeline.pipeline);
             compute_pass.set_bind_group(0, &pipeline.bind_group, &[]);
 
-            compute_pass.dispatch_workgroups(self.len[0], self.len[1], 1);
+            compute_pass.dispatch_workgroups(self.width, self.height, 1);
         }
 
-        queue.submit(commands.into_iter().chain(Some(encoder.finish())));
+        with_encoder(&mut encoder);
+
+        queue.submit(Some(encoder.finish()));
         let _ = device.poll(wgpu::MaintainBase::Wait);
     }
     pub fn reset(&self, device: &wgpu::Device, queue: &wgpu::Queue) {
-        self.dispatch(device, queue, [], &self.reset_pipeline)
+        self.dispatch(device, queue, |_| {}, &self.reset_pipeline)
     }
     pub fn step(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
-        self.dispatch(device, queue, [], &self.step_pipeline)
+        for _ in 0..10 {
+            self.dispatch(
+                device,
+                queue,
+                |encoder| {
+                    encoder.copy_buffer_to_buffer(
+                        &self.new_vals_buffer,
+                        0,
+                        &self.vals_buffer,
+                        0,
+                        self.vals_buffer.size(),
+                    );
+                },
+                &self.step_pipeline,
+            )
+        }
     }
 }
 
