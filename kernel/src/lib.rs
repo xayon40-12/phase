@@ -53,17 +53,16 @@ pub fn ising_step(
     let id = ix + w * ((iy + h - 1) % h);
 
     let v = vals[i];
-    let vp = 1.0 - v;
+    let vp = rngs[i].next_f32([i as u32, 0]).round();
     let s = -(vals[il] + vals[ir] + vals[iu] + vals[id]);
 
     let e = v * s - c * v;
     let ep = vp * s - c * vp;
 
     let r = rngs[i].next_f32([i as u32, 0]);
-    let update = rngs[i].next_f32([i as u32, 0]);
     let q = ((e - ep) / t).exp();
     let p = q / (1.0 + q);
-    if r < p && update < 1e-1 {
+    if r < p {
         new_vals[i] = vp;
     } else {
         new_vals[i] = v;

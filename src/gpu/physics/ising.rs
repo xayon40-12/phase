@@ -132,22 +132,20 @@ impl IsingPipeline {
         self.dispatch(device, queue, |_| {}, &self.reset_pipeline)
     }
     pub fn step(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
-        for _ in 0..10 {
-            self.dispatch(
-                device,
-                queue,
-                |encoder| {
-                    encoder.copy_buffer_to_buffer(
-                        &self.new_vals_buffer,
-                        0,
-                        &self.vals_buffer,
-                        0,
-                        self.vals_buffer.size(),
-                    );
-                },
-                &self.step_pipeline,
-            )
-        }
+        self.dispatch(
+            device,
+            queue,
+            |encoder| {
+                encoder.copy_buffer_to_buffer(
+                    &self.new_vals_buffer,
+                    0,
+                    &self.vals_buffer,
+                    0,
+                    self.vals_buffer.size(),
+                );
+            },
+            &self.step_pipeline,
+        )
     }
 }
 
