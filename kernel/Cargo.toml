@@ -9,12 +9,11 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 bytemuck = { version = "1.14", features = ["derive"] }
 num = { version = "0.4", default-features = false, features = ["libm"] }
-glam = { version = "0.24", default-features = false, features = ["libm"] }
+# glam = { version = "0.24", default-features = false, features = ["libm"] }
+spirv-std = { git = "https://github.com/rust-gpu/rust-gpu", rev = "45266f5" }
 
 gpu_random = { path = "../gpu_random" }
 
-[target.'cfg(target_arch = "spirv")'.dependencies]
-spirv-std = { git = "https://github.com/rust-gpu/rust-gpu", rev = "45266f5" }
 
 [lints]
 workspace = true

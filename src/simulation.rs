@@ -1,10 +1,10 @@
 use std::ops::RangeInclusive;
 
-use custom3d::Custom3d;
 use egui::Frame;
+use render_square::RenderSquare;
 
-pub mod custom3d;
 pub mod ising;
+pub mod render_square;
 
 pub enum Parameter {
     Slider {
@@ -41,7 +41,7 @@ pub struct SimulationGUI {
     parameters: Vec<Parameter>,
     create_simulation: Box<dyn Fn() -> Box<dyn Simulation>>,
     simulation: Box<dyn Simulation>,
-    custom3d: Custom3d,
+    render_square: RenderSquare,
 }
 
 impl SimulationGUI {
@@ -51,11 +51,19 @@ impl SimulationGUI {
     ) -> Self {
         let simulation = create_simulation();
         let parameters = simulation.egui_parameters();
+
+        let wgpu_render_state = cc
+            .wgpu_render_state
+            .as_ref()
+            .expect("No wgpu render state available.");
+
+        let (render_square, shader_module) = RenderSquare::new(wgpu_render_state);
+
         SimulationGUI {
             parameters,
             create_simulation,
             simulation,
-            custom3d: Custom3d::new(cc).expect("Custom3d"),
+            render_square,
         }
     }
 }
@@ -114,7 +122,7 @@ impl eframe::App for SimulationGUI {
                 egui::Frame::canvas(ui.style()).show(ui, |ui| {
                     ui.painter().add(egui_wgpu::Callback::new_paint_callback(
                         rect,
-                        self.custom3d.custom_callback(),
+                        self.render_square.custom_callback(),
                     ));
                 });
             });

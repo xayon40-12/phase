@@ -1,9 +1,10 @@
-// #![cfg_attr(target_arch = "spirv", no_std)]
 #![no_std]
 
 use bytemuck::{Pod, Zeroable};
-#[cfg(target_arch = "spirv")]
-use spirv_std::{glam::UVec3, spirv};
+use spirv_std::{
+    glam::{UVec3, Vec2, Vec4, vec2, vec4},
+    spirv,
+};
 
 use gpu_random::{GPURng, philox::Philox4x32};
 
@@ -24,7 +25,6 @@ pub fn ising_reset_stage(ix: usize, iy: usize, ising: &IsingCtx, vals: &mut [f32
     let id = ix + ising.width as usize * iy;
     vals[id] = 0.0;
 }
-#[cfg(target_arch = "spirv")]
 #[spirv(compute(threads(1)))]
 pub fn ising_reset(
     #[spirv(global_invocation_id)] gid: UVec3,
@@ -46,7 +46,6 @@ pub fn ising_stage(
     let r = rngs[id].next_f32([id as u32, 0]);
     vals[id] = r.round();
 }
-#[cfg(target_arch = "spirv")]
 #[spirv(compute(threads(1)))]
 pub fn ising(
     #[spirv(global_invocation_id)] gid: UVec3,
@@ -55,4 +54,24 @@ pub fn ising(
     #[spirv(storage_buffer, descriptor_set = 0, binding = 2)] rngs: &mut [Philox4x32],
 ) {
     ising_stage(gid.x as usize, gid.y as usize, ising, vals, rngs);
+}
+
+#[spirv(fragment)]
+pub fn square_fragment(
+    #[spirv(uniform, descriptor_set = 0, binding = 0)] vals: &Vec4,
+    uv: Vec2,
+    output: &mut Vec4,
+) {
+    *output = vec4(uv.x, uv.y, vals.x.cos(), 1.0);
+}
+
+#[spirv(vertex)]
+pub fn square_vertex(
+    #[spirv(vertex_index)] vert_id: i32,
+    #[spirv(position)] out_pos: &mut Vec4,
+    uv: &mut Vec2,
+) {
+    uv.x = (vert_id & 1) as f32;
+    uv.y = ((vert_id >> 1) & 1) as f32;
+    *out_pos = vec4(uv.x * 2.0 - 1.0, uv.y * 2.0 - 1.0, 0.0, 1.0);
 }

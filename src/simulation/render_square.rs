@@ -1,30 +1,31 @@
 use std::num::NonZeroU64;
 
-use egui_wgpu::CallbackTrait;
-use wgpu::util::DeviceExt;
+use egui_wgpu::{CallbackTrait, RenderState};
+use wgpu::{ShaderModule, util::DeviceExt};
 
-pub struct Custom3d {
+pub struct RenderSquare {
     angle: f32,
 }
 
-impl Custom3d {
-    pub fn new<'a>(cc: &'a eframe::CreationContext<'a>) -> Option<Self> {
-        // Get the WGPU render state from the eframe creation context. This can also be retrieved
-        // from `eframe::Frame` when you don't have a `CreationContext` available.
-        let wgpu_render_state = cc.wgpu_render_state.as_ref()?;
-
+impl RenderSquare {
+    pub fn new(wgpu_render_state: &RenderState) -> (Self, ShaderModule) {
         let device = &wgpu_render_state.device;
 
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("custom3d"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("./custom3d_wgpu_shader.wgsl").into()),
-        });
+        let shader_module = unsafe {
+            wgpu_render_state.device.create_shader_module_trusted(
+                wgpu::ShaderModuleDescriptor {
+                    label: Some("Shader module"),
+                    source: wgpu::util::make_spirv(crate::SPIRV),
+                },
+                wgpu::ShaderRuntimeChecks::unchecked(),
+            )
+        };
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("custom3d"),
+            label: Some("Render square bind group layout"),
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
+                visibility: wgpu::ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
@@ -35,27 +36,30 @@ impl Custom3d {
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("custom3d"),
+            label: Some("Render square pipeline layout"),
             bind_group_layouts: &[&bind_group_layout],
             push_constant_ranges: &[],
         });
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("custom3d"),
+            label: Some("Render square pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: None,
+                module: &shader_module,
+                entry_point: Some("square_vertex"),
                 buffers: &[],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
+                module: &shader_module,
+                entry_point: Some("square_fragment"),
                 targets: &[Some(wgpu_render_state.target_format.into())],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             }),
-            primitive: wgpu::PrimitiveState::default(),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                ..Default::default()
+            },
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
@@ -63,7 +67,7 @@ impl Custom3d {
         });
 
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("custom3d"),
+            label: Some("Render square uniform"),
             contents: bytemuck::cast_slice(&[0.0_f32; 4]), // 16 bytes aligned!
             // Mapping at creation (as done by the create_buffer_init utility) doesn't require us to to add the MAP_WRITE usage
             // (this *happens* to workaround this bug )
@@ -71,7 +75,7 @@ impl Custom3d {
         });
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("custom3d"),
+            label: Some("Render square bind group"),
             layout: &bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
@@ -92,7 +96,7 @@ impl Custom3d {
                 uniform_buffer,
             });
 
-        Some(Self { angle: 0.0 })
+        (Self { angle: 0.0 }, shader_module)
     }
 }
 
@@ -145,7 +149,7 @@ impl CallbackTrait for CustomTriangleCallback {
     }
 }
 
-impl Custom3d {
+impl RenderSquare {
     pub fn custom_callback(&mut self) -> impl CallbackTrait + 'static {
         self.angle += 0.01;
         CustomTriangleCallback { angle: self.angle }
@@ -172,6 +176,6 @@ impl TriangleRenderResources {
         // Draw our triangle!
         render_pass.set_pipeline(&self.pipeline);
         render_pass.set_bind_group(0, &self.bind_group, &[]);
-        render_pass.draw(0..3, 0..1);
+        render_pass.draw(0..4, 0..1);
     }
 }
