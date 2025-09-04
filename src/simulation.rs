@@ -55,7 +55,7 @@ impl SimulationGUI {
             parameters,
             create_simulation,
             simulation,
-            custom3d: Custom3d::new(cc).unwrap(),
+            custom3d: Custom3d::new(cc).expect("Custom3d"),
         }
     }
 }
@@ -139,7 +139,7 @@ pub fn with_egui(create_simulation: Box<dyn Fn() -> Box<dyn Simulation>>) {
 
 // When compiling to web using trunk:
 #[cfg(target_arch = "wasm32")]
-pub fn with_egui<S: Simulation>(create_simulation: Box<dyn Fn() -> Box<dyn Simulation>>) {
+pub fn with_egui(create_simulation: Box<dyn Fn() -> Box<dyn Simulation>>) {
     use eframe::wasm_bindgen::JsCast as _;
 
     // Redirect `log` message to `console.log` and friends:
