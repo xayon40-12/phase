@@ -1,33 +1,50 @@
+use std::sync::Arc;
+
 use bytemuck::bytes_of;
 use gpu_random::philox::Philox4x32;
 use kernel::IsingCtx;
-use wgpu::util::DeviceExt;
+use wgpu::{Buffer, util::DeviceExt};
 
-use crate::{error::WGPUError, gpu::pipeline::Pipeline};
+use crate::{gpu::pipeline::Pipeline, simulation::atomic_f32::AtomicF32};
+
+use super::{Physics, WGPUInfo};
 
 pub struct IsingPipeline {
-    ctx: IsingCtx,
-    ctx_buffer: wgpu::Buffer,
+    ctx_buffer: Buffer,
     reset_pipeline: Pipeline,
     step_pipeline: Pipeline,
+    vals_buffer: Buffer,
+    width: u32,
+    height: u32,
+    temperature: Arc<AtomicF32>,
+    chemical_potential: Arc<AtomicF32>,
     len: [u32; 2],
 }
 
 impl IsingPipeline {
-    pub async fn new(
+    pub fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         shader_module: &wgpu::ShaderModule,
-        ctx: IsingCtx,
         seed: u128,
-    ) -> Result<Self, WGPUError> {
+        width: u32,
+        height: u32,
+        temperature: Arc<AtomicF32>,
+        chemical_potential: Arc<AtomicF32>,
+    ) -> Self {
+        let ctx = IsingCtx {
+            width,
+            height,
+            temperature: temperature.load(),
+            chemical_potential: chemical_potential.load(),
+        };
         let ctx_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Ising ctx buffer"),
             contents: bytes_of(&ctx),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
-        let count = (ctx.width * ctx.height) as usize;
+        let count = (width * height) as usize;
 
         let vals_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Ising vals buffer"),
@@ -44,7 +61,6 @@ impl IsingPipeline {
         });
 
         let p = IsingPipeline {
-            ctx,
             reset_pipeline: Pipeline::new(
                 device,
                 shader_module,
@@ -65,28 +81,23 @@ impl IsingPipeline {
                 ],
             ),
             ctx_buffer,
+            vals_buffer,
+            width,
+            height,
+            temperature,
+            chemical_potential,
             len: [ctx.width, ctx.height],
         };
-        p.reset(device, queue).await?;
-        Ok(p)
+        p.reset(device, queue);
+        p
     }
-    pub async fn update_ctx(
-        &mut self,
-        queue: &wgpu::Queue,
-        temperature: f32,
-        chemical_potential: f32,
-    ) {
-        self.ctx.temperature = temperature;
-        self.ctx.chemical_potential = chemical_potential;
-        queue.write_buffer(&self.ctx_buffer, 0, bytes_of(&self.ctx));
-    }
-    async fn dispatch<const N: usize>(
+    fn dispatch<const N: usize>(
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         commands: [wgpu::CommandBuffer; N],
         pipeline: &Pipeline,
-    ) -> Result<(), WGPUError> {
+    ) {
         // Encode commands for this single pass
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some(&format!("{} Encoder", pipeline.name)),
@@ -106,17 +117,30 @@ impl IsingPipeline {
 
         queue.submit(commands.into_iter().chain(Some(encoder.finish())));
         let _ = device.poll(wgpu::MaintainBase::Wait);
+    }
+    pub fn reset(&self, device: &wgpu::Device, queue: &wgpu::Queue) {
+        self.dispatch(device, queue, [], &self.reset_pipeline)
+    }
+    pub fn step(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+        self.dispatch(device, queue, [], &self.step_pipeline)
+    }
+}
 
-        Ok(())
+impl Physics for IsingPipeline {
+    fn update(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+        let ctx = IsingCtx {
+            width: self.width,
+            height: self.height,
+            temperature: self.temperature.load(),
+            chemical_potential: self.chemical_potential.load(),
+        };
+        queue.write_buffer(&self.ctx_buffer, 0, bytes_of(&ctx));
+        self.step(device, queue)
     }
-    pub async fn reset(&self, device: &wgpu::Device, queue: &wgpu::Queue) -> Result<(), WGPUError> {
-        self.dispatch(device, queue, [], &self.reset_pipeline).await
-    }
-    pub async fn step(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-    ) -> Result<(), WGPUError> {
-        self.dispatch(device, queue, [], &self.step_pipeline).await
+    fn wgpu_info(&self) -> WGPUInfo {
+        (
+            "ising_fragment",
+            vec![(0, &self.ctx_buffer, true), (1, &self.vals_buffer, false)],
+        )
     }
 }

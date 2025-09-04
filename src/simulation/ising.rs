@@ -1,34 +1,36 @@
-use kernel::IsingCtx;
+use std::sync::Arc;
 
-use super::{Parameter, Simulation, UpadeParameter};
+use crate::gpu::physics::ising::IsingPipeline;
+
+use super::{Parameter, Simulation, UpadeParameter, atomic_f32::AtomicF32};
 
 pub struct Ising {
-    ctx: IsingCtx,
+    temperature: Arc<AtomicF32>,
+    chemical_potential: Arc<AtomicF32>,
 }
 
 impl Ising {
-    pub fn new(ctx: IsingCtx) -> Self {
-        Ising { ctx }
+    pub fn new() -> Self {
+        Ising {
+            temperature: Arc::new(AtomicF32::new(1.0)),
+            chemical_potential: Arc::new(AtomicF32::new(1.0)),
+        }
     }
 }
 
 impl Simulation for Ising {
-    fn reset(&mut self) {
-        //TODO
-    }
-
     fn egui_parameters(&self) -> Vec<Parameter> {
         vec![
             Parameter::Slider {
                 tag: "T",
-                value: self.ctx.temperature,
-                logarithmic: false,
+                value: self.temperature.load(),
+                logarithmic: true,
                 range: 1e-1..=1e1,
             },
             Parameter::Slider {
                 tag: "C",
-                value: self.ctx.chemical_potential,
-                logarithmic: false,
+                value: self.chemical_potential.load(),
+                logarithmic: true,
                 range: 1e-1..=1e1,
             },
         ]
@@ -36,8 +38,8 @@ impl Simulation for Ising {
     fn update_parameter(&mut self, update: UpadeParameter) {
         match update {
             UpadeParameter::Slider { tag, value } => match tag {
-                "T" => self.ctx.temperature = value,
-                "C" => self.ctx.chemical_potential = value,
+                "T" => self.temperature.store(value),
+                "C" => self.chemical_potential.store(value),
                 _ => {
                     panic!("Unexpected tag in update_parameter: \"{tag}\"")
                 }
@@ -45,7 +47,24 @@ impl Simulation for Ising {
             _ => {}
         }
     }
-    fn update(&mut self) {
-        //TODO
+    fn physics(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        shader_module: &wgpu::ShaderModule,
+        seed: u128,
+        width: u32,
+        height: u32,
+    ) -> Box<dyn crate::gpu::physics::Physics> {
+        Box::new(IsingPipeline::new(
+            device,
+            queue,
+            shader_module,
+            seed,
+            width,
+            height,
+            Arc::clone(&self.temperature),
+            Arc::clone(&self.chemical_potential),
+        ))
     }
 }

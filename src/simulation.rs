@@ -1,8 +1,12 @@
 use std::ops::RangeInclusive;
 
 use egui::Frame;
+use egui_wgpu::RenderState;
+use instant::SystemTime;
 use render_square::RenderSquare;
+use wgpu::ShaderModule;
 
+pub mod atomic_f32;
 pub mod ising;
 pub mod render_square;
 
@@ -29,19 +33,26 @@ pub enum UpadeParameter {
 }
 
 pub trait Simulation: Send + 'static {
-    fn reset(&mut self);
-
     fn egui_parameters(&self) -> Vec<Parameter>;
     fn update_parameter(&mut self, update: UpadeParameter);
-
-    fn update(&mut self);
+    fn physics(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        shader_module: &wgpu::ShaderModule,
+        seed: u128,
+        width: u32,
+        height: u32,
+    ) -> Box<dyn crate::gpu::physics::Physics>;
 }
 
 pub struct SimulationGUI {
     parameters: Vec<Parameter>,
-    create_simulation: Box<dyn Fn() -> Box<dyn Simulation>>,
     simulation: Box<dyn Simulation>,
     render_square: RenderSquare,
+    width: u32,
+    height: u32,
+    shader_module: ShaderModule,
 }
 
 impl SimulationGUI {
@@ -51,31 +62,62 @@ impl SimulationGUI {
     ) -> Self {
         let simulation = create_simulation();
         let parameters = simulation.egui_parameters();
+        let width = 1024;
+        let height = 1024;
 
         let wgpu_render_state = cc
             .wgpu_render_state
             .as_ref()
             .expect("No wgpu render state available.");
 
-        let (render_square, shader_module) = RenderSquare::new(wgpu_render_state);
-
+        let shader_module = unsafe {
+            wgpu_render_state.device.create_shader_module_trusted(
+                wgpu::ShaderModuleDescriptor {
+                    label: Some("Shader module"),
+                    source: wgpu::util::make_spirv(crate::SPIRV),
+                },
+                wgpu::ShaderRuntimeChecks::unchecked(),
+            )
+        };
+        let render_square = Self::new_render_square(
+            wgpu_render_state,
+            &shader_module,
+            &*simulation,
+            width,
+            height,
+        );
         SimulationGUI {
             parameters,
-            create_simulation,
             simulation,
             render_square,
+            width,
+            height,
+            shader_module,
         }
+    }
+    fn new_render_square(
+        wgpu_render_state: &RenderState,
+        shader_module: &ShaderModule,
+        simulation: &dyn Simulation,
+        width: u32,
+        height: u32,
+    ) -> RenderSquare {
+        let seed =
+            unsafe { std::mem::transmute(SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis()) };
+        let physics = simulation.physics(
+            &wgpu_render_state.device,
+            &wgpu_render_state.queue,
+            &shader_module,
+            seed,
+            width,
+            height,
+        );
+        RenderSquare::new(wgpu_render_state, &shader_module, physics)
     }
 }
 impl eframe::App for SimulationGUI {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        self.simulation.update();
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                if ui.button("reset").clicked() {
-                    self.simulation.reset();
-                }
-            });
             for p in self.parameters.iter_mut() {
                 match p {
                     Parameter::Slider {
@@ -115,14 +157,28 @@ impl eframe::App for SimulationGUI {
 
             Frame::canvas(ui.style()).show(ui, |ui| {
                 let desired_size = ui.available_size();
-                let ratio = desired_size.x / desired_size.y;
-                let rx = ratio.max(1.0);
-                let ry = ratio.recip().max(1.0);
+                // let ratio = desired_size.x / desired_size.y;
+                // let rx = ratio.max(1.0);
+                // let ry = ratio.recip().max(1.0);
                 let (_id, rect) = ui.allocate_space(desired_size);
+                if self.width != rect.width() as u32 || self.height != rect.height() as u32 {
+                    self.width = rect.width() as u32;
+                    self.height = rect.height() as u32;
+                    let wgpu_render_state = frame
+                        .wgpu_render_state()
+                        .expect("No wgpu render state available.");
+                    self.render_square = Self::new_render_square(
+                        wgpu_render_state,
+                        &self.shader_module,
+                        &*self.simulation,
+                        self.width,
+                        self.height,
+                    );
+                }
                 egui::Frame::canvas(ui.style()).show(ui, |ui| {
                     ui.painter().add(egui_wgpu::Callback::new_paint_callback(
                         rect,
-                        self.render_square.custom_callback(),
+                        self.render_square,
                     ));
                 });
             });

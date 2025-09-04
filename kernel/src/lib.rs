@@ -2,7 +2,7 @@
 
 use bytemuck::{Pod, Zeroable};
 use spirv_std::{
-    glam::{UVec3, Vec2, Vec4, vec2, vec4},
+    glam::{UVec3, Vec2, Vec4, vec4},
     spirv,
 };
 
@@ -20,49 +20,50 @@ pub struct IsingCtx {
     pub chemical_potential: f32,
 }
 
-#[inline]
-pub fn ising_reset_stage(ix: usize, iy: usize, ising: &IsingCtx, vals: &mut [f32]) {
-    let id = ix + ising.width as usize * iy;
-    vals[id] = 0.0;
-}
 #[spirv(compute(threads(1)))]
 pub fn ising_reset(
     #[spirv(global_invocation_id)] gid: UVec3,
     #[spirv(uniform, descriptor_set = 0, binding = 0)] ising: &IsingCtx,
     #[spirv(storage_buffer, descriptor_set = 0, binding = 1)] vals: &mut [f32],
 ) {
-    ising_reset_stage(gid.x as usize, gid.y as usize, ising, vals);
+    let ix = gid.x as usize;
+    let iy = gid.y as usize;
+    let id = ix + ising.width as usize * iy;
+    vals[id] = 0.0;
 }
 
-#[inline]
-pub fn ising_stage(
-    ix: usize,
-    iy: usize,
-    ising: &IsingCtx,
-    vals: &mut [f32],
-    rngs: &mut [Philox4x32],
-) {
-    let id = ix + ising.width as usize * iy;
-    let r = rngs[id].next_f32([id as u32, 0]);
-    vals[id] = r.round();
-}
 #[spirv(compute(threads(1)))]
-pub fn ising(
+pub fn ising_step(
     #[spirv(global_invocation_id)] gid: UVec3,
     #[spirv(uniform, descriptor_set = 0, binding = 0)] ising: &IsingCtx,
     #[spirv(storage_buffer, descriptor_set = 0, binding = 1)] vals: &mut [f32],
     #[spirv(storage_buffer, descriptor_set = 0, binding = 2)] rngs: &mut [Philox4x32],
 ) {
-    ising_stage(gid.x as usize, gid.y as usize, ising, vals, rngs);
+    let ix = gid.x as usize;
+    let iy = gid.y as usize;
+    let id = ix + ising.width as usize * iy;
+    let r = rngs[id].next_f32([id as u32, 0]);
+    vals[id] = r * (1.0 + ising.temperature.cos()) * 0.5;
 }
 
 #[spirv(fragment)]
-pub fn square_fragment(
-    #[spirv(uniform, descriptor_set = 0, binding = 0)] vals: &Vec4,
+pub fn ising_fragment(
+    #[spirv(uniform, descriptor_set = 0, binding = 0)] ising: &IsingCtx,
+    #[spirv(storage_buffer, descriptor_set = 0, binding = 1)] vals: &[f32],
     uv: Vec2,
     output: &mut Vec4,
 ) {
-    *output = vec4(uv.x, uv.y, vals.x.cos(), 1.0);
+    let w = ising.width as f32;
+    let h = ising.height as f32;
+    let id = (uv.x * (w - 1.0) + w * (h - 1.0) * uv.y) as usize;
+    let val = vals[id];
+
+    *output = vec4(uv.x, uv.y, val, 1.0);
+}
+
+#[spirv(fragment)]
+pub fn square_fragment(uv: Vec2, output: &mut Vec4) {
+    *output = vec4(uv.x, uv.y, 0.0, 1.0);
 }
 
 #[spirv(vertex)]
