@@ -29,7 +29,7 @@ pub fn ising_reset(
     let ix = gid.x as usize;
     let iy = gid.y as usize;
     let id = ix + ising.width as usize * iy;
-    vals[id] = ((ix + iy) % 2) as f32;
+    vals[id] = 1.0 - 2.0 * ((ix + iy) % 2) as f32;
 }
 
 #[spirv(compute(threads(1)))]
@@ -53,7 +53,7 @@ pub fn ising_step(
     let id = ix + w * ((iy + h - 1) % h);
 
     let v = vals[i];
-    let vp = rngs[i].next_f32([i as u32, 0]).round();
+    let vp = 1.0 - 2.0 * rngs[i].next_f32([i as u32, 0]).round();
     let s = -(vals[il] + vals[ir] + vals[iu] + vals[id]);
 
     let e = v * s - c * v;

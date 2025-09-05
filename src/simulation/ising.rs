@@ -12,8 +12,8 @@ pub struct Ising {
 impl Ising {
     pub fn new() -> Self {
         Ising {
-            temperature: Arc::new(AtomicF32::new(0.57)),
-            chemical_potential: Arc::new(AtomicF32::new(-2.0)),
+            temperature: Arc::new(AtomicF32::new(2.27)),
+            chemical_potential: Arc::new(AtomicF32::new(0.0)),
         }
     }
 }
@@ -25,13 +25,13 @@ impl Simulation for Ising {
                 tag: "T",
                 value: self.temperature.load(),
                 logarithmic: true,
-                range: 1e-1..=1e0,
+                range: 1e-1..=1e1,
             },
             Parameter::Slider {
                 tag: "C",
                 value: self.chemical_potential.load(),
                 logarithmic: false,
-                range: -4.0..=0.0,
+                range: -2.0..=2.0,
             },
         ]
     }
