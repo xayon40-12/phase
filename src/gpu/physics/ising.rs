@@ -185,7 +185,7 @@ impl Physics for IsingPipeline {
             let elapsed = self.time_history.iter().cloned().sum::<f32>() / len as f32;
             let limit = 0.017;
             if elapsed < limit {
-                self.repetitions += 1;
+                self.repetitions = (self.repetitions + 1).min(10);
             } else if elapsed > limit * 1.05 {
                 self.repetitions = (self.repetitions - 1).max(1);
             }
