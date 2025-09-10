@@ -18,7 +18,7 @@ pub struct IsingPipeline {
     width: u32,
     height: u32,
     temperature: Arc<AtomicF32>,
-    chemical_potential: Arc<AtomicF32>,
+    external_field: Arc<AtomicF32>,
 }
 
 impl IsingPipeline {
@@ -30,13 +30,13 @@ impl IsingPipeline {
         width: u32,
         height: u32,
         temperature: Arc<AtomicF32>,
-        chemical_potential: Arc<AtomicF32>,
+        external_field: Arc<AtomicF32>,
     ) -> Self {
         let ctx = IsingCtx {
             width,
             height,
             temperature: temperature.load(),
-            chemical_potential: chemical_potential.load(),
+            external_field: external_field.load(),
         };
         let ctx_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Ising ctx buffer"),
@@ -60,7 +60,9 @@ impl IsingPipeline {
             mapped_at_creation: false,
         });
 
-        let rngs = vec![Philox4x32::new(unsafe { std::mem::transmute(seed) }, 7); count];
+        let rngs = (0..count)
+            .map(|i| Philox4x32::new(seed, i as u64))
+            .collect::<Vec<_>>();
         let rngs_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Ising rngs buffer"),
             contents: bytemuck::cast_slice(&rngs),
@@ -75,6 +77,7 @@ impl IsingPipeline {
                 [
                     (0, &ctx_buffer, None, None),
                     (1, &vals_buffer, Some(false), None),
+                    (2, &rngs_buffer, Some(false), None),
                 ],
             ),
             step_pipeline: Pipeline::new(
@@ -94,7 +97,7 @@ impl IsingPipeline {
             width,
             height,
             temperature,
-            chemical_potential,
+            external_field,
         };
         p.reset(device, queue);
         p
@@ -103,7 +106,8 @@ impl IsingPipeline {
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        with_encoder: impl FnOnce(&mut CommandEncoder),
+        with_encoder: impl Fn(&mut CommandEncoder),
+        repetitions: usize,
         pipeline: &Pipeline,
     ) {
         // Encode commands for this single pass
@@ -111,27 +115,29 @@ impl IsingPipeline {
             label: Some(&format!("{} Encoder", pipeline.name)),
         });
 
-        {
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some(&format!("{} Pass", pipeline.name)),
-                timestamp_writes: None,
-            });
+        for _ in 0..repetitions {
+            {
+                let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    label: Some(&format!("{} Pass", pipeline.name)),
+                    timestamp_writes: None,
+                });
 
-            compute_pass.set_pipeline(&pipeline.pipeline);
-            compute_pass.set_bind_group(0, &pipeline.bind_group, &[]);
+                compute_pass.set_pipeline(&pipeline.pipeline);
+                compute_pass.set_bind_group(0, &pipeline.bind_group, &[]);
 
-            compute_pass.dispatch_workgroups(self.width, self.height, 1);
+                compute_pass.dispatch_workgroups(self.width, self.height, 1);
+            }
+
+            with_encoder(&mut encoder);
         }
-
-        with_encoder(&mut encoder);
 
         queue.submit(Some(encoder.finish()));
         let _ = device.poll(wgpu::MaintainBase::Wait);
     }
     pub fn reset(&self, device: &wgpu::Device, queue: &wgpu::Queue) {
-        self.dispatch(device, queue, |_| {}, &self.reset_pipeline)
+        self.dispatch(device, queue, |_| {}, 1, &self.reset_pipeline)
     }
-    pub fn step(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+    pub fn step(&mut self, repetitions: usize, device: &wgpu::Device, queue: &wgpu::Queue) {
         self.dispatch(
             device,
             queue,
@@ -144,6 +150,7 @@ impl IsingPipeline {
                     self.vals_buffer.size(),
                 );
             },
+            repetitions,
             &self.step_pipeline,
         )
     }
@@ -155,10 +162,10 @@ impl Physics for IsingPipeline {
             width: self.width,
             height: self.height,
             temperature: self.temperature.load(),
-            chemical_potential: self.chemical_potential.load(),
+            external_field: self.external_field.load(),
         };
         queue.write_buffer(&self.ctx_buffer, 0, bytes_of(&ctx));
-        self.step(device, queue)
+        self.step(5, device, queue)
     }
     fn wgpu_info(&self) -> WGPUInfo {
         (

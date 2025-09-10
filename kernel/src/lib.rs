@@ -11,27 +11,31 @@ use gpu_random::{GPURng, philox::Philox4x32};
 #[allow(unused_imports)]
 use num::Float;
 
+/// Struct which stores the size of the system, the temperature and external field strength.
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 pub struct IsingCtx {
     pub width: u32,
     pub height: u32,
     pub temperature: f32,
-    pub chemical_potential: f32,
+    pub external_field: f32,
 }
 
+/// Reset the state by randomizing the value in each cells.
 #[spirv(compute(threads(1)))]
 pub fn ising_reset(
     #[spirv(global_invocation_id)] gid: UVec3,
     #[spirv(uniform, descriptor_set = 0, binding = 0)] ising: &IsingCtx,
     #[spirv(storage_buffer, descriptor_set = 0, binding = 1)] vals: &mut [f32],
+    #[spirv(storage_buffer, descriptor_set = 0, binding = 2)] rngs: &mut [Philox4x32],
 ) {
     let ix = gid.x as usize;
     let iy = gid.y as usize;
-    let id = ix + ising.width as usize * iy;
-    vals[id] = 1.0 - 2.0 * ((ix + iy) % 2) as f32;
+    let i = ix + ising.width as usize * iy;
+    vals[i] = 1.0 - 2.0 * rngs[i].next_uniform().round();
 }
 
+/// Compute shader for the [Ising model](https://en.wikipedia.org/wiki/Ising_model) which compute a new random candidate in each cells and keep it with a probability depending on the energy of both old and candidate states.
 #[spirv(compute(threads(1)))]
 pub fn ising_step(
     #[spirv(global_invocation_id)] gid: UVec3,
@@ -43,7 +47,7 @@ pub fn ising_step(
     let ix = gid.x as usize;
     let iy = gid.y as usize;
     let t = ising.temperature;
-    let c = ising.chemical_potential;
+    let c = ising.external_field;
     let w = ising.width as usize;
     let h = ising.height as usize;
     let i = ix + w * iy;
@@ -53,22 +57,23 @@ pub fn ising_step(
     let id = ix + w * ((iy + h - 1) % h);
 
     let v = vals[i];
-    let vp = 1.0 - 2.0 * rngs[i].next_f32([i as u32, 0]).round();
+    let vc = 1.0 - 2.0 * rngs[i].next_uniform().round(); // New candidate
     let s = -(vals[il] + vals[ir] + vals[iu] + vals[id]);
 
     let e = v * s - c * v;
-    let ep = vp * s - c * vp;
+    let ec = vc * s - c * vc;
 
-    let r = rngs[i].next_f32([i as u32, 0]);
-    let q = ((e - ep) / t).exp();
+    let r = rngs[i].next_uniform();
+    let q = ((e - ec) / t).exp();
     let p = q / (1.0 + q);
     if r < p {
-        new_vals[i] = vp;
+        new_vals[i] = vc;
     } else {
         new_vals[i] = v;
     }
 }
 
+/// Fragment shader for the Ising model which shows spin up as blue and spin down as white.
 #[spirv(fragment)]
 pub fn ising_fragment(
     #[spirv(uniform, descriptor_set = 0, binding = 0)] ising: &IsingCtx,
@@ -86,11 +91,13 @@ pub fn ising_fragment(
     *output = vec4(1.0 - val, 1.0 - val, 1.0, 1.0);
 }
 
+/// Simple fragment shader to verify that the uv coordinates are correct by showing them in the red and blue channels.
 #[spirv(fragment)]
 pub fn square_fragment(uv: Vec2, output: &mut Vec4) {
     *output = vec4(uv.x, uv.y, 0.0, 1.0);
 }
 
+/// Simple vertex shader for a square made of a triangle stip. It outputs the uv coordinates in [0,1] to be used by the fragment shader.
 #[spirv(vertex)]
 pub fn square_vertex(
     #[spirv(vertex_index)] vert_id: i32,

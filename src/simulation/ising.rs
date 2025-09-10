@@ -6,14 +6,14 @@ use super::{Parameter, Simulation, UpadeParameter, atomic_f32::AtomicF32};
 
 pub struct Ising {
     temperature: Arc<AtomicF32>,
-    chemical_potential: Arc<AtomicF32>,
+    external_field: Arc<AtomicF32>,
 }
 
 impl Ising {
     pub fn new() -> Self {
         Ising {
-            temperature: Arc::new(AtomicF32::new(2.27)),
-            chemical_potential: Arc::new(AtomicF32::new(0.0)),
+            temperature: Arc::new(AtomicF32::new(2.2691853142)),
+            external_field: Arc::new(AtomicF32::new(0.0)),
         }
     }
 }
@@ -28,8 +28,8 @@ impl Simulation for Ising {
                 range: 1e-1..=1e1,
             },
             Parameter::Slider {
-                tag: "C",
-                value: self.chemical_potential.load(),
+                tag: "h",
+                value: self.external_field.load(),
                 logarithmic: false,
                 range: -2.0..=2.0,
             },
@@ -39,7 +39,7 @@ impl Simulation for Ising {
         match update {
             UpadeParameter::Slider { tag, value } => match tag {
                 "T" => self.temperature.store(value),
-                "C" => self.chemical_potential.store(value),
+                "h" => self.external_field.store(value),
                 _ => {
                     panic!("Unexpected tag in update_parameter: \"{tag}\"")
                 }
@@ -64,7 +64,7 @@ impl Simulation for Ising {
             width,
             height,
             Arc::clone(&self.temperature),
-            Arc::clone(&self.chemical_potential),
+            Arc::clone(&self.external_field),
         ))
     }
 }
