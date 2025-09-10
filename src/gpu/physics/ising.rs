@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use bytemuck::bytes_of;
 use gpu_random::philox::Philox4x32;
+use instant::Instant;
 use kernel::IsingCtx;
 use wgpu::{Buffer, CommandEncoder, util::DeviceExt};
 
@@ -19,6 +20,10 @@ pub struct IsingPipeline {
     height: u32,
     temperature: Arc<AtomicF32>,
     external_field: Arc<AtomicF32>,
+    repetitions: usize,
+    time_history: [f32; 10],
+    current_time: usize,
+    time: Instant,
 }
 
 impl IsingPipeline {
@@ -98,6 +103,10 @@ impl IsingPipeline {
             height,
             temperature,
             external_field,
+            repetitions: 1,
+            time_history: Default::default(),
+            current_time: 0,
+            time: Instant::now(),
         };
         p.reset(device, queue);
         p
@@ -165,7 +174,22 @@ impl Physics for IsingPipeline {
             external_field: self.external_field.load(),
         };
         queue.write_buffer(&self.ctx_buffer, 0, bytes_of(&ctx));
-        self.step(5, device, queue)
+        self.step(self.repetitions, device, queue);
+
+        self.time_history[self.current_time] = self.time.elapsed().as_secs_f32();
+        self.current_time += 1;
+        self.time = Instant::now();
+        let len = self.time_history.len();
+        if self.current_time == len {
+            self.current_time = 0;
+            let elapsed = self.time_history.iter().cloned().sum::<f32>() / len as f32;
+            let limit = 0.017;
+            if elapsed < limit {
+                self.repetitions += 1;
+            } else if elapsed > limit * 1.05 {
+                self.repetitions = (self.repetitions - 1).max(1);
+            }
+        }
     }
     fn wgpu_info(&self) -> WGPUInfo {
         (
