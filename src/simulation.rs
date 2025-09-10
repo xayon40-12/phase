@@ -175,12 +175,10 @@ impl eframe::App for SimulationGUI {
                         self.height,
                     );
                 }
-                egui::Frame::canvas(ui.style()).show(ui, |ui| {
-                    ui.painter().add(egui_wgpu::Callback::new_paint_callback(
-                        rect,
-                        self.render_square,
-                    ));
-                });
+                ui.painter().add(egui_wgpu::Callback::new_paint_callback(
+                    rect,
+                    self.render_square,
+                ));
             });
         });
         ctx.request_repaint();
