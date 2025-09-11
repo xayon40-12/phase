@@ -97,7 +97,7 @@ pub fn square_fragment(uv: Vec2, output: &mut Vec4) {
     *output = vec4(uv.x, uv.y, 0.0, 1.0);
 }
 
-/// Simple vertex shader for a square made of a triangle stip. It outputs the uv coordinates in [0,1] to be used by the fragment shader.
+/// Simple vertex shader for a square made of a triangle stip. It outputs the uv coordinates in `[0,1]` to be used by the fragment shader.
 #[spirv(vertex)]
 pub fn square_vertex(
     #[spirv(vertex_index)] vert_id: i32,

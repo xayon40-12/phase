@@ -1,5 +1,6 @@
 use std::sync::atomic::AtomicU32;
 
+/// Atomic f32 which only supports loading and storing operations.
 pub struct AtomicF32(AtomicU32);
 
 impl AtomicF32 {

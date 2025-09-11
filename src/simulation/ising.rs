@@ -4,6 +4,7 @@ use crate::gpu::physics::ising::IsingPipeline;
 
 use super::{Parameter, Simulation, UpadeParameter, atomic_f32::AtomicF32};
 
+/// Bridge between the egui rendering/events and the compute pipeline [IsingPipeline].
 pub struct Ising {
     temperature: Arc<AtomicF32>,
     external_field: Arc<AtomicF32>,

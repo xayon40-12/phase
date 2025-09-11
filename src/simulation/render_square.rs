@@ -1,12 +1,14 @@
 use egui_wgpu::{CallbackTrait, RenderState};
 use wgpu::ShaderModule;
 
-use crate::gpu::physics::Physics;
+use crate::gpu::physics::{FragmentEntry, FragmentInfo, Physics};
 
+/// Handle wgpu rendering from inside egui by implementing the [CallbackTrait]. It creates a simple square from a strip of two triangles which provides `uv` coordinates to a fragment shader provided to [RenderSquare::new].
 #[derive(Clone, Copy)]
 pub struct RenderSquare {}
 
 impl RenderSquare {
+    /// Setup the rendering of the fragment shader informations provided by `physics` which egui's [CallbackTrait].
     pub fn new(
         wgpu_render_state: &RenderState,
         shader_module: &ShaderModule,
@@ -14,27 +16,33 @@ impl RenderSquare {
     ) -> Self {
         let device = &wgpu_render_state.device;
 
-        let (fragment_entry_point, entries) = physics.wgpu_info();
+        let FragmentInfo {
+            fragment_entry_point,
+            entries,
+        } = physics.wgpu_fragment_info();
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Render square bind group layout"),
             entries: &entries
                 .iter()
-                .cloned()
-                .map(|(binding, _, uniform)| wgpu::BindGroupLayoutEntry {
-                    binding,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: if uniform {
-                            wgpu::BufferBindingType::Uniform
-                        } else {
-                            wgpu::BufferBindingType::Storage { read_only: true }
+                .map(
+                    |&FragmentEntry {
+                         binding, uniform, ..
+                     }| wgpu::BindGroupLayoutEntry {
+                        binding,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: if uniform {
+                                wgpu::BufferBindingType::Uniform
+                            } else {
+                                wgpu::BufferBindingType::Storage { read_only: true }
+                            },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
                         },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+                        count: None,
                     },
-                    count: None,
-                })
+                )
                 .collect::<Vec<_>>(),
         });
 
@@ -74,10 +82,14 @@ impl RenderSquare {
             layout: &bind_group_layout,
             entries: &entries
                 .into_iter()
-                .map(|(binding, buffer, _)| wgpu::BindGroupEntry {
-                    binding,
-                    resource: buffer.as_entire_binding(),
-                })
+                .map(
+                    |FragmentEntry {
+                         binding, buffer, ..
+                     }| wgpu::BindGroupEntry {
+                        binding,
+                        resource: buffer.as_entire_binding(),
+                    },
+                )
                 .collect::<Vec<_>>(),
         });
 

@@ -21,7 +21,7 @@ pub fn widening_mul_u32(a: u32, b: u32) -> (u32, u32) {
     (lo, hi)
 }
 
-/// Test that `widening_mul_u32` reproduces a multiplication of two u32 casted as u64.
+/// Test that [widening_mul_u32] reproduces a multiplication of two u32 casted as u64.
 #[test]
 fn test_widening() {
     use crate::{GPURng, philox::Philox4x32};

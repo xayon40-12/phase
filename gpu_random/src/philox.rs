@@ -9,7 +9,7 @@ use super::GPURng;
 
 /// Philox counter based random number generator from the Random123 paper:
 ///
-/// John K. Salmon, Mark A. Moraes, Ron O. Dror, and David E. Shaw. 2011. Parallel random numbers: as easy as 1, 2, 3. In Proceedings of 2011 International Conference for High Performance Computing, Networking, Storage and Analysis (SC '11). Association for Computing Machinery, New York, NY, USA, Article 16, 1–12. https://doi.org/10.1145/2063384.2063405
+/// John K. Salmon, Mark A. Moraes, Ron O. Dror, and David E. Shaw. 2011. Parallel random numbers: as easy as 1, 2, 3. In Proceedings of 2011 International Conference for High Performance Computing, Networking, Storage and Analysis (SC '11). Association for Computing Machinery, New York, NY, USA, Article 16, 1–12. <https://doi.org/10.1145/2063384.2063405>
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Pod, Zeroable)]
 pub struct Philox4x32 {
@@ -24,7 +24,7 @@ pub struct Philox4x32 {
 impl Philox4x32 {
     /// Create a Philox4x32 with an initial `seed` and `key`. The `key` allows to have many independent streams of random numbers for a same initial `seed`.
     ///
-    /// NOTE: This method cannot be called in a WebGPU as it u128 and u64 are not available. Use `Pilox4x32::new_u32` instead.
+    /// NOTE: This method cannot be called in a WebGPU as it u128 and u64 are not available. Use [Pilox4x32::new_u32] instead.
     pub fn new(seed: u128, key: u64) -> Self {
         Self::new_u32(unsafe { core::mem::transmute(seed) }, unsafe {
             core::mem::transmute(key)
@@ -88,7 +88,7 @@ impl GPURng for Philox4x32 {
     }
 }
 
-/// Simple test to verify that the random number from `next_normal(mu, sigma)` are actually normally distributed.
+/// Simple test to verify that the random number from [Philox4x32::next_normal] are actually normally distributed.
 #[test]
 pub fn test_philox_normal() {
     let mut phi = Philox4x32::new(0, 0);

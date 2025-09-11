@@ -8,8 +8,9 @@ use wgpu::{Buffer, CommandEncoder, util::DeviceExt};
 
 use crate::{gpu::pipeline::Pipeline, simulation::atomic_f32::AtomicF32};
 
-use super::{Physics, WGPUInfo};
+use super::{FragmentEntry, FragmentInfo, Physics};
 
+/// Handles the compute pipeline for the Ising model simulation.
 pub struct IsingPipeline {
     ctx_buffer: Buffer,
     reset_pipeline: Pipeline,
@@ -20,7 +21,7 @@ pub struct IsingPipeline {
     height: u32,
     temperature: Arc<AtomicF32>,
     external_field: Arc<AtomicF32>,
-    repetitions: usize,
+    step_per_frames: usize,
     time_history: [f32; 10],
     current_time: usize,
     time: Instant,
@@ -103,7 +104,7 @@ impl IsingPipeline {
             height,
             temperature,
             external_field,
-            repetitions: 1,
+            step_per_frames: 1,
             time_history: Default::default(),
             current_time: 0,
             time: Instant::now(),
@@ -119,7 +120,6 @@ impl IsingPipeline {
         repetitions: usize,
         pipeline: &Pipeline,
     ) {
-        // Encode commands for this single pass
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some(&format!("{} Encoder", pipeline.name)),
         });
@@ -174,8 +174,9 @@ impl Physics for IsingPipeline {
             external_field: self.external_field.load(),
         };
         queue.write_buffer(&self.ctx_buffer, 0, bytes_of(&ctx));
-        self.step(self.repetitions, device, queue);
+        self.step(self.step_per_frames, device, queue);
 
+        // Automatically handle performance by looking at the time taken by an entire frame (aiming for 60 fps). Increase the number of steps per frames if the average time of the 10 last frames is bellow 0.017 (just above 0.016666=1/60), and decrease if the time exceeds 0.017*1.05. The gap between 0.017 and 0.017*1.05 is to avoible oscillations of the number of steps per frames.
         self.time_history[self.current_time] = self.time.elapsed().as_secs_f32();
         self.current_time += 1;
         self.time = Instant::now();
@@ -185,16 +186,28 @@ impl Physics for IsingPipeline {
             let elapsed = self.time_history.iter().cloned().sum::<f32>() / len as f32;
             let limit = 0.017;
             if elapsed < limit {
-                self.repetitions = (self.repetitions + 1).min(10);
+                self.step_per_frames = (self.step_per_frames + 1).min(10);
             } else if elapsed > limit * 1.05 {
-                self.repetitions = (self.repetitions - 1).max(1);
+                self.step_per_frames = (self.step_per_frames - 1).max(1);
             }
         }
     }
-    fn wgpu_info(&self) -> WGPUInfo {
-        (
-            "ising_fragment",
-            vec![(0, &self.ctx_buffer, true), (1, &self.vals_buffer, false)],
-        )
+    fn wgpu_fragment_info(&self) -> FragmentInfo {
+        // The fragment shader kernel to render the value computed by the IsingPipeline is the function located in kernel/src/lib.rs called `ising_fragment`. It takes the context and values so `self.ctx_buffer` and `self.vals_buffer`.
+        FragmentInfo {
+            fragment_entry_point: "ising_fragment",
+            entries: vec![
+                FragmentEntry {
+                    binding: 0,
+                    buffer: &self.ctx_buffer,
+                    uniform: true,
+                },
+                FragmentEntry {
+                    binding: 1,
+                    buffer: &self.vals_buffer,
+                    uniform: false,
+                },
+            ],
+        }
     }
 }

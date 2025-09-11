@@ -1,5 +1,6 @@
 use std::num::NonZero;
 
+/// Convenient wrapper for ComputePipeline with default parameters.
 pub struct Pipeline {
     pub pipeline: wgpu::ComputePipeline,
     pub bind_group: wgpu::BindGroup,
@@ -7,13 +8,13 @@ pub struct Pipeline {
 }
 
 impl Pipeline {
+    /// Contsruct a ComputePipeline with entry point `name` and a list of `entries` as `(binding, buffer, storage type, dynamic offset)`. A value of `None` for the `storage type` means `Uniform` whereas a value of `Some(read_only)` means a `Storage` buffer with the corresponding `read_only` value.
     pub fn new<const N: usize>(
         device: &wgpu::Device,
         shader_module: &wgpu::ShaderModule,
         name: &str,
         entries: [(u32, &wgpu::Buffer, Option<bool>, Option<u64>); N],
     ) -> Self {
-        // Create bind group layout for Bitonic (1 buffer: data)
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some(&format!("{name} Bind Group Layout")),
             entries: &entries.map(|(binding, _, read_only, has_dynamic_offset)| {
@@ -34,7 +35,6 @@ impl Pipeline {
             }),
         });
 
-        // Create bind group
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some(&format!("{name} Bind Group")),
             layout: &bind_group_layout,
@@ -52,7 +52,6 @@ impl Pipeline {
             }),
         });
 
-        // Create pipeline layout
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some(&format!("{name} Pipeline Layout")),
             bind_group_layouts: &[&bind_group_layout],

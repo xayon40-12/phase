@@ -10,6 +10,7 @@ pub mod atomic_f32;
 pub mod ising;
 pub mod render_square;
 
+/// Enumeration of the possible parameters that a simulation needs to display inside the egui UI.
 pub enum Parameter {
     Slider {
         tag: &'static str,
@@ -26,15 +27,20 @@ pub enum Parameter {
     },
 }
 
+/// Enumeration for updating the value of the parameters from [Parameter] once they have been changed in the egui UI. This enum is provided to the [Simulation] through its [Simulation::update_parameter] method.
 pub enum UpadeParameter {
     Slider { tag: &'static str, value: f32 },
     Toggle { tag: &'static str, enable: bool },
     Button { tag: &'static str },
 }
 
+/// Trait to define the behavior of a simulation with respect to the egui event loop.
 pub trait Simulation: Send + 'static {
+    /// Provides a list of parameter to be desplayed by egui.
     fn egui_parameters(&self) -> Vec<Parameter>;
+    /// Update a parameter which was changed in the egui UI.
     fn update_parameter(&mut self, update: UpadeParameter);
+    /// Contrust the physics pipeline in the GPU and return a [Physics](crate::gpu::physics::Physics) needed to update the physics (run the compute pipeline) and setup the rendering inside egui with [RenderSquare].
     fn physics(
         &self,
         device: &wgpu::Device,
@@ -45,7 +51,7 @@ pub trait Simulation: Send + 'static {
         height: u32,
     ) -> Box<dyn crate::gpu::physics::Physics>;
 }
-
+/// Strut that handles the setup of egui and wgpu, and then starts the [Simulation] and handles the update of the different parameters (see [Parameter]). The rendering of the simulation is performed with the [CallbackTrait](egui_wgpu::CallbackTrait) from [egui_wgpu] used by the [RenderSquare] helper.
 pub struct SimulationGUI {
     parameters: Vec<Parameter>,
     simulation: Box<dyn Simulation>,
@@ -56,11 +62,7 @@ pub struct SimulationGUI {
 }
 
 impl SimulationGUI {
-    pub fn new<'a>(
-        cc: &'a eframe::CreationContext<'a>,
-        create_simulation: Box<dyn Fn() -> Box<dyn Simulation>>,
-    ) -> Self {
-        let simulation = create_simulation();
+    pub fn new<'a>(cc: &'a eframe::CreationContext<'a>, simulation: Box<dyn Simulation>) -> Self {
         let parameters = simulation.egui_parameters();
         let width = 1024;
         let height = 1024;
@@ -157,10 +159,8 @@ impl eframe::App for SimulationGUI {
 
             Frame::canvas(ui.style()).show(ui, |ui| {
                 let desired_size = ui.available_size();
-                // let ratio = desired_size.x / desired_size.y;
-                // let rx = ratio.max(1.0);
-                // let ry = ratio.recip().max(1.0);
                 let (_id, rect) = ui.allocate_space(desired_size);
+                // If the rendering size changed, create a new [RenderSquare] with the new size.
                 if self.width != rect.width() as u32 || self.height != rect.height() as u32 {
                     self.width = rect.width() as u32;
                     self.height = rect.height() as u32;
@@ -186,14 +186,14 @@ impl eframe::App for SimulationGUI {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub fn with_egui(create_simulation: Box<dyn Fn() -> Box<dyn Simulation>>) {
+pub fn with_egui(simulation: Box<dyn Simulation>) {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
 
     let native_options = eframe::NativeOptions::default();
     if let Err(err) = eframe::run_native(
-        "Reinforcement",
+        "Phase",
         native_options,
-        Box::new(|cc| Ok(Box::new(SimulationGUI::new(cc, create_simulation)))),
+        Box::new(|cc| Ok(Box::new(SimulationGUI::new(cc, simulation)))),
     ) {
         log::log!(log::Level::Error, "{err}");
     }
@@ -201,7 +201,7 @@ pub fn with_egui(create_simulation: Box<dyn Fn() -> Box<dyn Simulation>>) {
 
 // When compiling to web using trunk:
 #[cfg(target_arch = "wasm32")]
-pub fn with_egui(create_simulation: Box<dyn Fn() -> Box<dyn Simulation>>) {
+pub fn with_egui(simulation: Box<dyn Simulation>) {
     use eframe::wasm_bindgen::JsCast as _;
 
     // Redirect `log` message to `console.log` and friends:
@@ -225,7 +225,7 @@ pub fn with_egui(create_simulation: Box<dyn Fn() -> Box<dyn Simulation>>) {
             .start(
                 canvas,
                 web_options,
-                Box::new(|cc| Ok(Box::new(SimulationGUI::new(cc, create_simulation)))),
+                Box::new(|cc| Ok(Box::new(SimulationGUI::new(cc, simulation)))),
             )
             .await;
 

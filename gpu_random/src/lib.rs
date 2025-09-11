@@ -7,7 +7,7 @@ use num::Float;
 pub mod philox;
 pub mod widening_mul;
 
-/// The `GPURng` trait represent random number generator which should  be compatible with [RustGPU](https://rust-gpu.github.io) when targeting for WebGPU with the WASM32 target architecture.
+/// The [GPURng] trait represent random number generator which should  be compatible with [RustGPU](https://rust-gpu.github.io) when targeting for WebGPU with the WASM32 target architecture.
 ///
 /// NOTE: Structs implementing this trait are supposed to only use 32 bits primitives. Other primitives such as u64 are prohibited as they are not compatible with WebGPU.
 pub trait GPURng {
@@ -36,7 +36,7 @@ pub trait GPURng {
     }
     /// Compute next random number with normal distribution of mean `mu` and standard deviation `sigma`.
     ///
-    /// NOTE: This method is provided for convenience but it is suboptimal as it discards one of the two normally distributed numbers computed by `next_normal_pair`. It is preferable to reimplement this method by storing and reusing the second number from the pair later.
+    /// NOTE: This method is provided for convenience but it is suboptimal as it discards one of the two normally distributed numbers computed by [GPURng::next_normal_pair]. It is preferable to reimplement this method by storing and reusing the second number from the pair later.
     fn next_normal(&mut self, mu: f32, sigma: f32) -> f32 {
         mu + sigma * self.next_normal_pair()[0]
     }
