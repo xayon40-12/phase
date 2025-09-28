@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use bytemuck::bytes_of;
-use gpu_random::philox::Philox4x32;
 use instant::Instant;
 use kernel::IsingCtx;
+use rand_gpu_wasm::philox::Philox4x32;
 use wgpu::{Buffer, CommandEncoder, util::DeviceExt};
 
 use crate::{gpu::pipeline::Pipeline, simulation::atomic_f32::AtomicF32};

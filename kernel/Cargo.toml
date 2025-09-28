@@ -10,9 +10,7 @@ crate-type = ["cdylib", "rlib"]
 bytemuck = { version = "1.14", features = ["derive"] }
 num = { version = "0.4", default-features = false, features = ["libm"] }
 spirv-std = { git = "https://github.com/rust-gpu/rust-gpu", rev = "45266f5" }
-
-gpu_random = { path = "../gpu_random" }
-
+rand_gpu_wasm = { git = "https://github.com/xayon40-12/rand_gpu_wasm.git" }
 
 [lints]
 workspace = true

@@ -8,7 +8,7 @@ default = []
 gpu_test = []
 
 [dependencies]
-gpu_random = { path = "gpu_random" }
+rand_gpu_wasm = { git = "https://github.com/xayon40-12/rand_gpu_wasm.git" }
 kernel = { path = "kernel" }
 instant = { version = "0.1", features = ["wasm-bindgen"], default-features = false }
 eframe = { version = "0.31", default-features = false , features = ["wgpu"] }
@@ -35,7 +35,7 @@ env_logger = "0.11.8"
 spirv-builder = { git = "https://github.com/rust-gpu/rust-gpu", rev = "45266f5" }
 
 [workspace]
-members = ["kernel", "gpu_random"]
+members = ["kernel"]
 
 [workspace.lints.rust]
 unexpected_cfgs = { level = "allow", check-cfg = ['cfg(target_arch, values("spirv"))'] }

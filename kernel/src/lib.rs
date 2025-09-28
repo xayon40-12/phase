@@ -6,7 +6,7 @@ use spirv_std::{
     spirv,
 };
 
-use gpu_random::{GPURng, philox::Philox4x32};
+use rand_gpu_wasm::{GPURng, philox::Philox4x32};
 
 #[allow(unused_imports)]
 use num::Float;
