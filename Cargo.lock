@@ -2294,7 +2294,8 @@ checksum = "69cdb34c158ceb288df11e18b4bd39de994f6657d83847bdffdbd7f346754b0f"
 [[package]]
 name = "rand_gpu_wasm"
 version = "1.0.0"
-source = "git+https://github.com/xayon40-12/rand_gpu_wasm.git#4de59d61ff1574630780d708183c60afd634ddab"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "35ca1fcd31aef9a5d8613f844af986cb0fdfc1566eca107e208a89804884e4ea"
 dependencies = [
  "bytemuck",
  "num",
